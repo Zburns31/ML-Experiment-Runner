@@ -29,14 +29,13 @@ class Dataset:
         self.data_path = Path(data_dir, dataset_name)
         self.data = None
 
-    def load_data(self, verbose: bool = False, **kwargs) -> None:
+    def load_data(self, **kwargs) -> None:
         """
         Loads data from the specified path.
         """
         try:
             self.data = pd.read_csv(self.data_path, **kwargs)
-            if verbose:
-                logger.info(f'Loading Dataset: {self.dataset_name}')
+            logger.info(f'Loading Dataset: {self.dataset_name}')
 
         except FileNotFoundError:
             print(f'Dataset: {self.dataset_name} not found in location: {self.data_path}')
@@ -73,7 +72,7 @@ class Dataset:
     def check_missing_values(self) -> None:
         """Checks for any missing values in the dataset."""
         has_nulls = self.data.isnull().values.any()
-        if not has_nulls:
+        if has_nulls:
             logger.warning("Warning Missing Values Detected")
 
     def check_outliers(self) -> Dict[str, List[int]]:
