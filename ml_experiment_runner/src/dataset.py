@@ -79,7 +79,7 @@ class Dataset:
     def check_missing_values(self):
         """Checks for any missing values in the dataset."""
         has_nulls = self.data.isnull().values.any()
-        if not has_nulls:
+        if has_nulls:
             logger.warning("Warning Missing Values Detected")
 
     def check_outliers(self):

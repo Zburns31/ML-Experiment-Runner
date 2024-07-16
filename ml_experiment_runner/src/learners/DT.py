@@ -2,13 +2,12 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.ticker as mtick
-import logging
 import time
 
 from config import Config
 from utilities import get_directory
 from .base_learner import BaseClassifier
-from typing import Dict, Tuple, List, Self, Type
+from typing import Dict, Tuple, List, Self, Type, Union
 from pathlib import Path
 
 from sklearn.tree import DecisionTreeClassifier
@@ -21,6 +20,8 @@ from sklearn.model_selection import (
 
 
 class DTClassifier(BaseClassifier):
+    """TODO: Add default params for DT"""
+
     def __init__(
         self,
         config: Type[Config],
@@ -37,17 +38,40 @@ class DTClassifier(BaseClassifier):
         )
 
     def get_model_name(self) -> str:
+        """Returns a human readable name of the ML algorithm used
+
+        Returns:
+            str: I.e. Decision Tree Classifier
+        """
         return "Decision Tree Classifier"
 
-    def fit(self, X, y, verbose=True):
-        if verbose:
+    def fit(self, X: np.ndarray, y: np.array):
+        """Fits the underlying estimator/model to the data
+
+        Args:
+            X np.array: Represents the independentfeatures used to train the model
+            y np.array: Represents the target/response variable
+            verbose (bool, optional): Flag to log additional information to the console
+
+        Returns:
+            DTClassifier: Returns the fitted model
+        """
+        if self.verbose:
             print("Fitting the model...")
         self.model.fit(X, y)
-        if verbose:
+        if self.verbose:
             print("Model fitting completed.")
         return self
 
-    def predict(self, X):
+    def predict(self, X: np.ndarray) -> np.ndarray:
+        """Returns the mean response given a set of independent features
+
+        Args:
+            X (np.ndarray): Represents the independent features
+
+        Returns:
+            np.ndarray: Returns the mean response given the predictors
+        """
         return self.model.predict(X)
 
     def plot_learning_curve(
@@ -57,9 +81,22 @@ class DTClassifier(BaseClassifier):
         param_name: str,
         dataset_name: str,
         cv: int = 5,
-        save_plot=True,
-        show_plot=False,
+        save_plot: bool = True,
+        show_plot: bool = False,
     ):
+        """Generates a learning curve for the underlying model
+
+        TODO: Add parameter for custom training set sizes
+
+        Args:
+            X (np.array): Represnets the predictor/independent features
+            y (np.array): Represents the target/repsonse variable
+            param_name (str): Hyperparameter that we are using in the underlying model
+            dataset_name (str): Name of the dataset we are training/predicting against
+            cv (int, optional): Number of cross-validation folds. Defaults to 5.
+            save_plot (bool, optional): Whether to save the generated charts or not. Defaults to True.
+            show_plot (bool, optional): Whether to plot the generated charts or not. Defaults to False.
+        """
         train_sizes, train_scores, test_scores = learning_curve(self.model, X, y, cv=cv)
 
         train_scores_mean = np.mean(train_scores, axis=1) * 100
@@ -102,31 +139,32 @@ class DTClassifier(BaseClassifier):
 
     def plot_validation_curve(
         self,
-        X,
-        y,
-        dataset_name,
-        param_name,
-        param_range,
-        cv=5,
-        save_plot=True,
-        show_plot=False,
+        X: np.ndarray,
+        y: np.ndarray,
+        dataset_name: str,
+        param_name: str,
+        param_range: Union[np.ndarray, List[float]],
+        cv: int = 5,
+        save_plot: bool = True,
+        show_plot: bool = False,
     ) -> int:
-        """
-        Plot a validation curve with the range of hyperparameter values on the X-axis and the metric score on the Y-axis.
+        """Plot a validation curve with the range of hyperparameter values on the X-axis and the metric score on the Y-axis. This function
+        also returns the value of the specified hyperparameter with the best testing score
 
-        :param estimator: The model/estimator for which the validation curve is plotted.
-        :param X: The input data.
-        :param y: The target data.
-        :param param_name: Name of the hyperparameter to vary.
-        :param param_range: The range of values for the hyperparameter.
-        :param scoring: The scoring function to use.
-        :param cv: The number of cross-validation folds (default is 5).
-        :param n_jobs: The number of jobs to run in parallel (default is -1, using all processors).
-        :param verbose: The verbosity level (default is 1).
+        Args:
+            X (np.array): Represnets the predictor/independent features
+            y (np.array): Represents the target/repsonse variable
+            dataset_name (str): Name of the dataset we are training/predicting against
+            param_name (str): Hyperparameter that we are using in the underlying model
+            param_range ()
+            cv (int, optional): Number of cross-validation folds. Defaults to 5.
+            save_plot (bool, optional): Whether to save the generated charts or not. Defaults to True.
+            show_plot (bool, optional): Whether to plot the generated charts or not. Defaults to False.
 
-        returns the best hyperparameter value
+        Returns:
+            int: The value of the specified hyperparameter that returns the best mean test score
         """
-        # scoring=scoring
+
         train_scores, test_scores = validation_curve(
             self.model,
             X,
