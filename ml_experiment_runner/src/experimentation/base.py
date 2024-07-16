@@ -3,11 +3,23 @@ from sklearn.base import BaseEstimator
 from typing import Self, List, Dict
 import logging
 
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+logging.basicConfig(
+    level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+)
 logger = logging.getLogger(__name__)
 
+
 class MLExperimentRunner(ABC, BaseEstimator):
-    def __init__(self, model, config, eval_metric, param_grid, search_method, experiment_name, verbose = False):
+    def __init__(
+        self,
+        model,
+        config,
+        eval_metric,
+        param_grid,
+        search_method,
+        experiment_name,
+        verbose=False,
+    ):
         self.model = model
         self.config = config
         self.param_grid = param_grid
@@ -25,7 +37,7 @@ class MLExperimentRunner(ABC, BaseEstimator):
         pass
 
     @abstractmethod
-    def fit(self, X, y, verbose = True) -> Self:
+    def fit(self, X, y, verbose=True) -> Self:
         pass
 
     @abstractmethod
@@ -34,12 +46,11 @@ class MLExperimentRunner(ABC, BaseEstimator):
 
     @abstractmethod
     def plot_learning_curve(self, learner: BaseEstimator) -> None:
-       pass
+        pass
 
     @abstractmethod
     def plot_learning_run_time(self, learner: BaseEstimator) -> None:
-       pass
-
+        pass
 
     @abstractmethod
     def save_training_results(self, learner: BaseEstimator) -> None:
