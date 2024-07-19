@@ -1,4 +1,5 @@
 from pathlib import Path
+from typing import Dict, Any
 
 
 def get_directory(child_dir: str) -> Path:
@@ -6,8 +7,17 @@ def get_directory(child_dir: str) -> Path:
     try:
         path.mkdir(parents=True, exist_ok=False)
     except FileExistsError:
-        print("Folder is already there")
+        print(f"Folder already exists: {path}")
     else:
-        print("Folder was created")
+        print(f"Folder was created: {path}")
 
     return path
+
+
+def pretty_print(d: Dict[str, Any], indent=0) -> None:
+    for key, value in d.items():
+        print("\t" * indent + str(key))
+        if isinstance(value, dict):
+            pretty_print(value, indent + 1)
+        else:
+            print("\t" * (indent + 1) + str(value))

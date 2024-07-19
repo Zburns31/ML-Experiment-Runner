@@ -33,17 +33,7 @@ class DTClassifier(BaseClassifier):
             config=config,
             param_grid=param_grid,
             eval_metric=eval_metric,
-            seed=config.RANDOM_SEED,
-            verbose=config.VERBOSE,
         )
-
-    def get_model_name(self) -> str:
-        """Returns a human readable name of the ML algorithm used
-
-        Returns:
-            str: I.e. Decision Tree Classifier
-        """
-        return "Decision Tree Classifier"
 
     def fit(self, X: np.ndarray, y: np.array):
         """Fits the underlying estimator/model to the data
@@ -108,7 +98,7 @@ class DTClassifier(BaseClassifier):
             + " = "
             + str(self.model.get_params().get(param_name))
         )
-        plt.title(f"Learning Curve ({self.get_model_name()}) | {annotation}")
+        plt.title(f"Learning Curve ({self.name}) | {annotation}")
         plt.xlabel("# of Training Observations")
         plt.ylabel("Score")
 
@@ -127,7 +117,7 @@ class DTClassifier(BaseClassifier):
         plt.tight_layout()
 
         if save_plot:
-            model_name = self.get_model_name().replace(" ", "_")
+            model_name = self.name.replace(" ", "_")
             plot_name = f"{dataset_name}_{model_name}_learning_curve.png"
 
             image_path = Path(get_directory(self.config.IMAGE_DIR), plot_name)
@@ -215,7 +205,7 @@ class DTClassifier(BaseClassifier):
         plt.tight_layout()
 
         if save_plot:
-            model_name = self.get_model_name().replace(" ", "_")
+            model_name = self.name.replace(" ", "_")
             plot_name = f"{dataset_name}_{model_name}_validation_curve.png"
 
             image_path = Path(get_directory(self.config.IMAGE_DIR), plot_name)
@@ -235,7 +225,7 @@ class DTClassifier(BaseClassifier):
         runtime = end_time - start_time
 
         plt.figure()
-        plt.title(f"Training Runtime ({self.get_human_readable_model_name()})")
+        plt.title(f"Training Runtime ({self.name})")
         plt.xlabel("Training examples")
         plt.ylabel("Runtime (seconds)")
         plt.bar(["Run Time"], [runtime])

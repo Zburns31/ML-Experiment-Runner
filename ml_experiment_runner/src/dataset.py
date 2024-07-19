@@ -4,7 +4,7 @@ import logging
 
 from config import Config
 from learners.DT import DTClassifier
-from typing import Dict, Tuple, List
+from typing import Dict, Tuple, List, Type
 from pathlib import Path
 from sklearn.model_selection import train_test_split
 
@@ -26,23 +26,32 @@ logging.basicConfig(
 
 
 class Dataset:
-    def __init__(self, dataset_name: str, config: Config):
-        self.dataset_name = dataset_name
-        self.data = None
-        self.config = config
+    def __init__(self, data_path: str, data_delimiter: str, config: Config):
+        self.data_path: str = (
+            data_path  # CHange to dataset_path and make name a property
+        )
+        self.data: pd.DataFrame = None
+        self.delimiter: str = data_delimiter
+        self.config: Type[Config] = config
+        self.verbose: bool = config.VERBOSE
+        self.outliers = None
+
+    @property
+    def name(self) -> str:
+        return self.data_path.replace(".csv", "").replace("-", "_")
 
     def load_data(self, verbose: bool = False, **kwargs) -> None:
         """
         Loads data from the specified path.
         """
         try:
-            data_path = Path(self.config.DATA_DIR, self.dataset_name)
+            data_path = Path(self.config.DATA_DIR, self.data_path)
             self.data = pd.read_csv(data_path, **kwargs)
             if verbose:
-                logger.info(f"Loading Dataset: {self.dataset_name}")
+                logger.info(f"Loading Dataset: {self.name}")
 
         except FileNotFoundError:
-            print(f"Dataset: {self.dataset_name} not found in location: {data_path}")
+            print(f"Dataset: {self.name} not found in location: {data_path}")
 
         logger.info("Data loaded successfully")
         logger.info(
@@ -61,7 +70,8 @@ class Dataset:
                 .value_counts(normalize=normalize_counts)
                 .sort_index()
                 .reset_index()
-                .style.format({"proportion": "{:,.2%}"})
+                .style.hide()  # hide index
+                .format({"proportion": "{:,.2%}"})
                 .to_string()
             )
             # return target_class_dist
@@ -69,12 +79,13 @@ class Dataset:
                 include="all", percentiles=[0.01, 0.25, 0.5, 0.75, 0.99]
             ).round(2)
 
-            logger.info(
-                "Target Column: {} | Class Distribution: {}".format(
-                    target_col, target_class_dist
+            if self.verbose:
+                logger.info(
+                    "Target Column: {} | Class Distribution: {}".format(
+                        target_col, target_class_dist
+                    )
                 )
-            )
-            logger.info("Data Summary: {}".format(summary_df))
+                logger.info("Data Summary: {}".format(summary_df))
 
     def check_missing_values(self):
         """Checks for any missing values in the dataset."""
@@ -126,31 +137,26 @@ class Dataset:
             )
 
     def create_train_test_split(
-        self, target_col: str, test_size: float, seed: int, stratify_col: str = None
+        self,
+        target_col: str,
     ) -> Tuple[pd.DataFrame, pd.DataFrame, pd.Series, pd.Series]:
-
-        has_nulls = self.data.isnull().values.any()
-        if not has_nulls:
-            logger.warning("Warning Missing Values Detected")
 
         X = self.data.loc[:, self.data.columns != target_col]
         y = self.data[target_col]
 
-        if stratify_col and stratify_col == target_col:
-            stratify_col = y
-
-        elif stratify_col and stratify_col != target_col:
-            stratify_col = self.data[stratify_col].values
-
+        stratify = y if self.config.ML_PREPROCESS_PARAMS["shuffle"] else None
         X_TRAIN, X_TEST, y_train, y_test = train_test_split(
             X,
             y,
-            random_state=seed,
-            test_size=test_size,
-            shuffle=True,
-            stratify=stratify_col,
+            random_state=self.config.RANDOM_SEED,
+            test_size=self.config.ML_PREPROCESS_PARAMS["test_size"],
+            shuffle=self.config.ML_PREPROCESS_PARAMS["shuffle"],
+            stratify=stratify,
         )
-        logger.info(f"Train Set Size: {len(X_TRAIN)} | Test Set Size: {len(X_TEST)}")
+        if self.verbose:
+            logger.info(
+                f"Train Set Size: {len(X_TRAIN)} | Test Set Size: {len(X_TEST)}"
+            )
 
         return X_TRAIN, X_TEST, y_train, y_test, X, y
 
@@ -167,18 +173,23 @@ class Dataset:
         """
         pass
 
+    def run(self, target_col: str):
+        self.load_data(verbose=self.verbose, delimiter=self.delimiter)
+        self.summary_statistics(target_col=target_col)
+        self.check_missing_values()
+        self.outliers = self.check_outliers()
+
+        X_TRAIN, X_TEST, y_train, y_test, X, y = self.create_train_test_split(
+            target_col
+        )
+        return X_TRAIN, X_TEST, y_train, y_test, X, y
+
 
 if __name__ == "__main__":
 
-    wine_data = Dataset("winequality-white.csv", config)
-    wine_data.load_data(delimiter=";")
-    wine_data.summary_statistics("quality")
-    wine_data.check_missing_values()
-    outliers_dict = wine_data.check_outliers()
-
-    X_TRAIN, X_TEST, y_train, y_test, X, y = wine_data.create_train_test_split(
-        "quality", 0.3, 42, stratify_col="quality"
-    )
+    X_TRAIN, X_TEST, y_train, y_test, X, y = Dataset(
+        "winequality-white.csv", data_delimiter=";", config=config
+    ).run(target_col="quality")
 
     logger.info("Finished Processing Dataset")
 
@@ -186,8 +197,8 @@ if __name__ == "__main__":
     eval_metric = "accuracy"
     wine_dt = DTClassifier(config, parameter_grid, eval_metric)
 
-    print(wine_dt.unique_hyperparameters)
-    print(wine_dt.get_params())
+    # print(wine_dt.unique_hyperparameters)
+    # print(wine_dt.get_params())
     scoring_func = wine_dt.get_scorer("accuracy")
 
     best_param_value = wine_dt.plot_validation_curve(

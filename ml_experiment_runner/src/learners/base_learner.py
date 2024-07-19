@@ -26,15 +26,17 @@ class BaseClassifier(ClassifierMixin, BaseEstimator, ABC):
         config: Type[Config],
         param_grid: Dict[str, List[int]],
         eval_metric: str,
-        seed: int,
-        verbose=False,
     ):
         self.model = model
         self.config = config
         self.param_grid = param_grid
         self.eval_metric = eval_metric
-        self.seed = seed
+        self.seed = config.RANDOM_SEED
         self.verbose = config.VERBOSE
+
+    @property
+    def name(self) -> str:
+        return self.__class__.__name__
 
     @property
     def classes_(self):
@@ -91,15 +93,11 @@ class BaseClassifier(ClassifierMixin, BaseEstimator, ABC):
             )
 
     @abstractmethod
-    def get_model_name(self) -> str:
-        pass
-
-    @abstractmethod
     def fit(self, X, y, verbose=True) -> Self:
         pass
 
     @abstractmethod
-    def predict(self, X, y) -> Self:
+    def predict(self, X, y, proba=False) -> Self:
         pass
 
     @abstractmethod
@@ -113,3 +111,11 @@ class BaseClassifier(ClassifierMixin, BaseEstimator, ABC):
     @abstractmethod
     def plot_training_run_time(self, learner: BaseEstimator) -> None:
         pass
+
+    # @abstractmethod
+    # def plot_confusion_matrix(self):
+    #     pass
+
+    # @abstractmethod
+    # def plot_roc_curve(self, binary_clf=False):
+    #     pass
