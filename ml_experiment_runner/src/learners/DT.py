@@ -122,7 +122,9 @@ class DTClassifier(BaseClassifier):
 
             image_path = Path(get_directory(self.config.IMAGE_DIR), plot_name)
             plt.savefig(image_path)
-            print(image_path)
+
+            if self.verbose:
+                print(f"Saving Learning Curve to: {image_path.relative_to(Path.cwd())}")
 
         if show_plot:
             plt.show()
@@ -162,7 +164,6 @@ class DTClassifier(BaseClassifier):
             param_name=param_name,
             param_range=param_range,
             cv=cv,
-            verbose=self.verbose,
         )
 
         train_scores_mean = np.mean(train_scores, axis=1) * 100
@@ -210,7 +211,11 @@ class DTClassifier(BaseClassifier):
 
             image_path = Path(get_directory(self.config.IMAGE_DIR), plot_name)
             plt.savefig(image_path)
-            print(image_path)
+
+            if self.verbose:
+                print(
+                    f"Saving Validation Curve to: {image_path.relative_to(Path.cwd())}"
+                )
 
         if show_plot:
             plt.show()
@@ -232,3 +237,9 @@ class DTClassifier(BaseClassifier):
 
         if show_plot:
             plt.show()
+
+    def prune_tree(self):
+        pass
+
+    def export_tree(self):
+        pass

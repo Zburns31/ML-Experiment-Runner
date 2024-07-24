@@ -11,7 +11,7 @@ from sklearn.model_selection import train_test_split
 pd.set_option("expand_frame_repr", False)
 pd.set_option("display.max_columns", 999)
 
-config = Config()
+config = Config(verbose=True)
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(
@@ -26,18 +26,29 @@ logging.basicConfig(
 
 
 class Dataset:
+    """
+    Wrapper class to help automate common data analysis elements. This is primarily used for already cleaned datasets
+
+    TODO:
+        - Add functionality for creating a balanced dataset from an inbalanced one (i.e. straitified sampling)
+        - Add plots for heatmap (corrleation or covariance)
+        - Add standard or min-max scaling
+        - Add functionality for creating ML Pipeline for train and test sets
+
+    """
+
     def __init__(self, data_path: str, data_delimiter: str, config: Config):
         self.data_path: str = (
             data_path  # CHange to dataset_path and make name a property
         )
-        self.data: pd.DataFrame = None
+        self.data = None
         self.delimiter: str = data_delimiter
         self.config: Type[Config] = config
         self.verbose: bool = config.VERBOSE
         self.outliers = None
 
     @property
-    def name(self) -> str:
+    def dataset_name(self) -> str:
         return self.data_path.replace(".csv", "").replace("-", "_")
 
     def load_data(self, verbose: bool = False, **kwargs) -> None:
@@ -48,10 +59,10 @@ class Dataset:
             data_path = Path(self.config.DATA_DIR, self.data_path)
             self.data = pd.read_csv(data_path, **kwargs)
             if verbose:
-                logger.info(f"Loading Dataset: {self.name}")
+                logger.info(f"Loading Dataset: {self.dataset_name}")
 
         except FileNotFoundError:
-            print(f"Dataset: {self.name} not found in location: {data_path}")
+            print(f"Dataset: {self.dataset_name} not found in location: {data_path}")
 
         logger.info("Data loaded successfully")
         logger.info(
@@ -85,7 +96,7 @@ class Dataset:
                         target_col, target_class_dist
                     )
                 )
-                logger.info("Data Summary: {}".format(summary_df))
+                logger.info("Data Summary: \n{}".format(summary_df))
 
     def check_missing_values(self):
         """Checks for any missing values in the dataset."""
@@ -120,7 +131,9 @@ class Dataset:
                 if outlier_indices:
                     outliers_dict[col] = outlier_indices
 
-            logger.info(f"Outliers Detected in columns: {list(outliers_dict.keys())}")
+            logger.warning(
+                f"Outliers Detected in columns: {list(outliers_dict.keys())}"
+            )
             return outliers_dict
         else:
             raise ValueError(
@@ -144,7 +157,7 @@ class Dataset:
         X = self.data.loc[:, self.data.columns != target_col]
         y = self.data[target_col]
 
-        stratify = y if self.config.ML_PREPROCESS_PARAMS["shuffle"] else None
+        stratify = y if self.config.ML_PREPROCESS_PARAMS["stratify"] else None
         X_TRAIN, X_TEST, y_train, y_test = train_test_split(
             X,
             y,
@@ -174,6 +187,9 @@ class Dataset:
         pass
 
     def run(self, target_col: str):
+        if self.verbose:
+            logger.info(f"Reading, Loading and Processing Dataset: {self.dataset_name}")
+
         self.load_data(verbose=self.verbose, delimiter=self.delimiter)
         self.summary_statistics(target_col=target_col)
         self.check_missing_values()
@@ -182,14 +198,19 @@ class Dataset:
         X_TRAIN, X_TEST, y_train, y_test, X, y = self.create_train_test_split(
             target_col
         )
-        return X_TRAIN, X_TEST, y_train, y_test, X, y
+        self.x_train, self.x_test = X_TRAIN, X_TEST
+        self.y_train, self.y_test = y_train, y_test
+        self.features, self.target = X, y
+        return self
+
+        # return dataset, X_TRAIN, X_TEST, y_train, y_test, X, y
 
 
 if __name__ == "__main__":
 
-    X_TRAIN, X_TEST, y_train, y_test, X, y = Dataset(
-        "winequality-white.csv", data_delimiter=";", config=config
-    ).run(target_col="quality")
+    dataset = Dataset("winequality-white.csv", data_delimiter=";", config=config).run(
+        target_col="quality"
+    )
 
     logger.info("Finished Processing Dataset")
 
@@ -197,13 +218,11 @@ if __name__ == "__main__":
     eval_metric = "accuracy"
     wine_dt = DTClassifier(config, parameter_grid, eval_metric)
 
-    # print(wine_dt.unique_hyperparameters)
-    # print(wine_dt.get_params())
     scoring_func = wine_dt.get_scorer("accuracy")
 
     best_param_value = wine_dt.plot_validation_curve(
-        X,
-        y,
+        dataset.features,
+        dataset.target,
         dataset_name="winequality-white",
         param_name="max_depth",
         param_range=np.arange(1, 11),
@@ -212,5 +231,9 @@ if __name__ == "__main__":
 
     wine_dt.set_params(max_depth=best_param_value)
     wine_dt.plot_learning_curve(
-        X, y, param_name="max_depth", dataset_name="winequality-white", save_plot=True
+        dataset.features,
+        dataset.target,
+        param_name="max_depth",
+        dataset_name="winequality-white",
+        save_plot=True,
     )

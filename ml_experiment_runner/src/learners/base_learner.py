@@ -106,10 +106,22 @@ class BaseClassifier(ClassifierMixin, BaseEstimator, ABC):
 
     @abstractmethod
     def plot_validation_curve(self, learner: BaseEstimator) -> None:
+        """
+        TODO: Move implementation from DT into here
+
+        Args:
+            learner (BaseEstimator): _description_
+        """
         pass
 
     @abstractmethod
     def plot_training_run_time(self, learner: BaseEstimator) -> None:
+        """
+        TODO: Move implementation from DT into here
+
+        Args:
+            learner (BaseEstimator): _description_
+        """
         pass
 
     # @abstractmethod
