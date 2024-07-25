@@ -1,12 +1,17 @@
-import logging
+import pandas as pd
+import numpy as np
+
+import matplotlib.pyplot as plt
+import matplotlib.ticker as mtick
 
 from config import Config
 from pathlib import Path
+from utilities import get_directory
 from abc import ABC, abstractmethod
-from typing import Dict, Tuple, List, Self, Any, Callable, Type
+from typing import Dict, Type, List, Self, Any, Callable, Union
 
 from sklearn.base import BaseEstimator, ClassifierMixin
-from sklearn.model_selection import GridSearchCV
+from sklearn.model_selection import learning_curve, validation_curve
 from sklearn.metrics import (
     make_scorer,
     accuracy_score,
@@ -20,6 +25,15 @@ from sklearn.metrics import (
 
 
 class BaseClassifier(ClassifierMixin, BaseEstimator, ABC):
+    """
+    TODO: Nest directories for images and results for easier sorting
+
+    Args:
+        ClassifierMixin (_type_): _description_
+        BaseEstimator (_type_): _description_
+        ABC (_type_): _description_
+    """
+
     def __init__(
         self,
         model: BaseEstimator,
@@ -100,21 +114,175 @@ class BaseClassifier(ClassifierMixin, BaseEstimator, ABC):
     def predict(self, X, y, proba=False) -> Self:
         pass
 
-    @abstractmethod
-    def plot_learning_curve(self, learner: BaseEstimator) -> None:
-        pass
+    def plot_learning_curve(
+        self,
+        X: np.array,
+        y: np.array,
+        param_name: str,
+        dataset_name: str,
+        cv: int = 5,
+        save_plot: bool = True,
+        show_plot: bool = False,
+    ):
+        """Generates a learning curve for the underlying model
 
-    @abstractmethod
-    def plot_validation_curve(self, learner: BaseEstimator) -> None:
-        """
-        TODO: Move implementation from DT into here
+        TODO: Add parameter for custom training set sizes
 
         Args:
-            learner (BaseEstimator): _description_
+            X (np.array): Represnets the predictor/independent features
+            y (np.array): Represents the target/repsonse variable
+            param_name (str): Hyperparameter that we are using in the underlying model
+            dataset_name (str): Name of the dataset we are training/predicting against
+            cv (int, optional): Number of cross-validation folds. Defaults to 5.
+            save_plot (bool, optional): Whether to save the generated charts or not. Defaults to True.
+            show_plot (bool, optional): Whether to plot the generated charts or not. Defaults to False.
         """
-        pass
+        train_sizes, train_scores, test_scores = learning_curve(self.model, X, y, cv=cv)
 
-    @abstractmethod
+        train_scores_mean = np.mean(train_scores, axis=1) * 100
+        test_scores_mean = np.mean(test_scores, axis=1) * 100
+
+        fig, ax = plt.subplots(nrows=1, ncols=1, figsize=(10, 6), dpi=100, sharey=False)
+        annotation = (
+            param_name.replace("_", " ").capitalize()
+            + " = "
+            + str(self.model.get_params().get(param_name))
+        )
+        plt.title(f"Learning Curve ({self.name}) | {annotation}")
+        plt.xlabel("# of Training Observations")
+        plt.ylabel("Score")
+
+        plt.plot(
+            train_sizes, train_scores_mean, "o-", color="r", label="Training score"
+        )
+        plt.plot(
+            train_sizes,
+            test_scores_mean,
+            "o-",
+            color="g",
+            label="Cross-validation score",
+        )
+        ax.yaxis.set_major_formatter(mtick.PercentFormatter())
+        plt.legend(loc="best")
+        plt.tight_layout()
+
+        if save_plot:
+            model_name = self.name.replace(" ", "_")
+            plot_name = f"{dataset_name}_{model_name}_learning_curve.png"
+
+            image_path = Path(
+                get_directory(self.config.IMAGE_DIR, dataset_name, model_name),
+                plot_name,
+            )
+            plt.savefig(image_path)
+
+            if self.verbose:
+                print(f"Saving Learning Curve to: {image_path.relative_to(Path.cwd())}")
+
+        if show_plot:
+            plt.show()
+
+    def plot_validation_curve(
+        self,
+        X: np.ndarray,
+        y: np.ndarray,
+        dataset_name: str,
+        param_name: str,
+        param_range: Union[np.ndarray, List[float]],
+        cv: int = 5,
+        save_plot: bool = True,
+        show_plot: bool = False,
+    ) -> int:
+        """Plot a validation curve with the range of hyperparameter values on the X-axis and the metric score on the Y-axis. This function
+        also returns the value of the specified hyperparameter with the best testing score
+
+        Args:
+            X (np.array): Represnets the predictor/independent features
+            y (np.array): Represents the target/repsonse variable
+            dataset_name (str): Name of the dataset we are training/predicting against
+            param_name (str): Hyperparameter that we are using in the underlying model
+            param_range ()
+            cv (int, optional): Number of cross-validation folds. Defaults to 5.
+            save_plot (bool, optional): Whether to save the generated charts or not. Defaults to True.
+            show_plot (bool, optional): Whether to plot the generated charts or not. Defaults to False.
+
+        Returns:
+            int: The value of the specified hyperparameter that returns the best mean test score
+        """
+
+        train_scores, test_scores = validation_curve(
+            self.model,
+            X,
+            y,
+            param_name=param_name,
+            param_range=param_range,
+            cv=cv,
+        )
+
+        train_scores_mean = np.mean(train_scores, axis=1) * 100
+        train_scores_std = np.std(train_scores, axis=1) * 100
+        test_scores_mean = np.mean(test_scores, axis=1) * 100
+        test_scores_std = np.std(test_scores, axis=1) * 100
+
+        # Get the best parameter value based on the cross-validation score
+        best_param_index = np.argmax(test_scores_mean)
+        best_param_value = param_range[best_param_index]
+
+        fig, ax = plt.subplots(nrows=1, ncols=1, figsize=(10, 6), dpi=100, sharey=False)
+        cleaned_param_name = param_name.replace("_", " ").capitalize()
+        plt.title(f"Validation Curve for {param_name}")
+        plt.xlabel(cleaned_param_name)
+        plt.ylabel("Score")
+
+        plt.plot(param_range, train_scores_mean, label="Training score", color="r")
+        plt.fill_between(
+            param_range,
+            train_scores_mean - train_scores_std,
+            train_scores_mean + train_scores_std,
+            alpha=0.1,
+            color="r",
+        )
+
+        plt.plot(
+            param_range, test_scores_mean, label="Cross-validation score", color="g"
+        )
+        plt.fill_between(
+            param_range,
+            test_scores_mean - test_scores_std,
+            test_scores_mean + test_scores_std,
+            alpha=0.1,
+            color="g",
+        )
+
+        ax.yaxis.set_major_formatter(mtick.PercentFormatter())
+        plt.legend(loc="best")
+        plt.tight_layout()
+
+        if save_plot:
+            model_name = self.name.replace(" ", "_")
+            plot_name = f"{dataset_name}_{model_name}_validation_curve.png"
+
+            image_path = Path(
+                get_directory(
+                    self.config.IMAGE_DIR,
+                    dataset_name,
+                    model_name,
+                ),
+                plot_name,
+            )
+            plt.savefig(image_path)
+
+            if self.verbose:
+                # Relative path
+                print(
+                    f"Saving Validation Curve to: {image_path.relative_to(Path.cwd())}"
+                )
+
+        if show_plot:
+            plt.show()
+
+        return int(best_param_value)
+
     def plot_training_run_time(self, learner: BaseEstimator) -> None:
         """
         TODO: Move implementation from DT into here
@@ -124,10 +292,8 @@ class BaseClassifier(ClassifierMixin, BaseEstimator, ABC):
         """
         pass
 
-    # @abstractmethod
-    # def plot_confusion_matrix(self):
-    #     pass
+    def plot_confusion_matrix(self):
+        pass
 
-    # @abstractmethod
-    # def plot_roc_curve(self, binary_clf=False):
-    #     pass
+    def plot_roc_curve(self, binary_clf=False):
+        pass

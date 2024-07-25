@@ -1,3 +1,19 @@
+import logging
+from config import Config
+from pathlib import Path
+
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(name)s - %(levelname)s: %(message)s",
+    datefmt="%Y-%m-%d:%H:%M:%S",
+    handlers=[
+        logging.FileHandler(Path(Config().LOGS_DIR, "ml_experiments.log"), mode="w+"),
+        logging.StreamHandler(),
+    ],
+)
+logger = logging.getLogger(__name__)
+
 import argparse
 import os
 import json
@@ -122,7 +138,9 @@ if __name__ == "__main__":
 
     print("Finished Processing Dataset")
     print("-" * width)
+
     print("Beginning ML Experiments")
+    experiment_results = []
 
     exp_type = args.experiment_type
     if exp_type in ["dt", "all"]:

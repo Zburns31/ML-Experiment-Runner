@@ -7,7 +7,7 @@ from pathlib import Path
 # Used for loggin purposes
 width = os.get_terminal_size().columns
 
-config = Config()
+config = Config(verbose=True)
 
 logging.basicConfig(
     level=logging.INFO,

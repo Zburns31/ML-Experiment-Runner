@@ -2,8 +2,8 @@ from pathlib import Path
 from typing import Dict, Any
 
 
-def get_directory(child_dir: str) -> Path:
-    path = Path.cwd() / child_dir
+def get_directory(child_dir: str, *args: str) -> Path:
+    path = Path.cwd() / child_dir / Path(*args)
     try:
         path.mkdir(parents=True, exist_ok=False)
     except FileExistsError:

@@ -203,8 +203,6 @@ class Dataset:
         self.features, self.target = X, y
         return self
 
-        # return dataset, X_TRAIN, X_TEST, y_train, y_test, X, y
-
 
 if __name__ == "__main__":
 
