@@ -1,28 +1,57 @@
-import pandas as pd
-import numpy as np
 import logging
-
 from config import Config
-from learners.DT import DTClassifier
-from typing import Dict, Tuple, List, Type
 from pathlib import Path
-from sklearn.model_selection import train_test_split
 
-pd.set_option("expand_frame_repr", False)
-pd.set_option("display.max_columns", 999)
-
-config = Config(verbose=True)
-
+logging_config = Config(
+    data_procesing_params={}, ml_processing_params={}, verbose=False
+)
 logger = logging.getLogger(__name__)
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - %(name)s - %(levelname)s: %(message)s",
     datefmt="%Y-%m-%d:%H:%M:%S",
     handlers=[
-        logging.FileHandler(Path(config.LOGS_DIR, "data_processing.log"), mode="w+"),
+        logging.FileHandler(
+            Path(logging_config.LOGS_DIR, "data_processing.log"), mode="w+"
+        ),
         logging.StreamHandler(),
     ],
 )
+
+import pandas as pd
+import numpy as np
+from learners.DT import DTClassifier
+from typing import Dict, Tuple, List, Type, Union, Self
+from utilities import get_directory
+
+import matplotlib.pyplot as plt
+
+plt.set_loglevel("WARNING")
+import seaborn as sns
+
+from ydata_profiling import ProfileReport
+from sklearn.model_selection import train_test_split
+
+pd.set_option("expand_frame_repr", False)
+pd.set_option("display.max_columns", 999)
+
+###############################################################################
+# Dataset Schemas
+WINE_DATA_SCHEMA = {
+    "fixed acidity": "float64",
+    "volatile acidity": "float64",
+    "citric acid": "float64",
+    "residual sugar": "float64",
+    "chlorides": "float64",
+    "free sulfur dioxide": "float64",
+    "total sulfur dioxide": "float64",
+    "density": "float64",
+    "pH": "float64",
+    "sulphates": "float64",
+    "alcohol": "float64",
+    "quality": "category",
+}
+###############################################################################
 
 
 class Dataset:
@@ -31,7 +60,6 @@ class Dataset:
 
     TODO:
         - Add functionality for creating a balanced dataset from an inbalanced one (i.e. straitified sampling)
-        - Add plots for heatmap (corrleation or covariance)
         - Add standard or min-max scaling
         - Add functionality for creating ML Pipeline for train and test sets
 
@@ -50,6 +78,16 @@ class Dataset:
     @property
     def dataset_name(self) -> str:
         return self.data_path.replace(".csv", "").replace("-", "_")
+
+    def set_categorical_variable_order(
+        self, col_name: str, category_order: List[Union[str, int]], ordered=True
+    ) -> None:
+
+        df = self.data
+        df[col_name].cat.reorder_categories(
+            new_categories=category_order, ordered=ordered
+        )
+        self.data = df
 
     def load_data(self, verbose: bool = False, **kwargs) -> None:
         """
@@ -140,14 +178,42 @@ class Dataset:
                 "Data not loaded. Please load the data first using the load_data method."
             )
 
-    def cast_datatypes(self, column_type_map):
-        """Casts datatypes to the appropriate formats based on the data content"""
-        if self.data is not None or not self.data.empty:
-            pass
+    def cast_datatypes(
+        self, column_type_map: Dict[str, str], ordered: bool = True
+    ) -> None:
+        """Casts datatypes to the appropriate formats based on the data content and orders categories if applicable. Automatically sets order of categories via:
+            - If numeric, sort numerically
+            - If string, sort lexicographically
+
+        Args:
+            column_type_map (Dict[str, str]): _description_
+            ordered (bool, optional): _description_. Defaults to True.
+
+        Raises:
+            ValueError: Raises error if DF is not instantiated yet
+        """
+        df = self.data
+        if df is not None and not df.empty:
+            for column, dtype in column_type_map.items():
+                if column in df.columns:
+                    df[column] = df[column].astype(dtype)
+
+                    if dtype == "category":
+                        if df[column].dtype.name == "category":
+                            if pd.api.types.is_numeric_dtype(df[column].cat.categories):
+                                df[column].cat.reorder_categories(
+                                    sorted(df[column].cat.categories, key=float),
+                                    ordered=ordered,
+                                )
+                            else:
+                                df[column].cat.reorder_categories(
+                                    sorted(df[column].cat.categories), ordered=ordered
+                                )
         else:
             raise ValueError(
                 "Data not loaded. Please load the data first using the load_data method"
             )
+        self.data = df
 
     def create_train_test_split(
         self,
@@ -186,52 +252,250 @@ class Dataset:
         """
         pass
 
-    def run(self, target_col: str):
+    def create_violin_plots(
+        self,
+        df: pd.DataFrame,
+        feature_list: List[str],
+        target: str,
+        save_plot: bool = True,
+        show_plot: bool = False,
+    ):
+        """
+        Creates a grid of violin plots using seaborn with the x-axis as the class label and the y-axis as the feature value.
+
+        Parameters:
+        df (pd.DataFrame): The DataFrame containing the features and target.
+        feature_list (List[str]): List of independent features to plot.
+        target (str): The target column name to plot features against.
+        """
+        # Melt the dataframe to long-form or tidy-form
+        melted_df = pd.melt(
+            df,
+            id_vars=[target],
+            value_vars=feature_list,
+            var_name="Feature",
+            value_name="Value",
+        )
+
+        # Create a FacetGrid for the violin plots
+        # Uses the implied categorical ordering for the target variable
+        g = sns.FacetGrid(melted_df, col="Feature", col_wrap=3, sharey=False, height=4)
+        g.map(
+            sns.violinplot,
+            target,
+            "Value",
+            palette="muted",
+            inner="quartile",
+            # order=label_order,
+            hue=melted_df[target],
+            legend=False,
+        )
+
+        # Set titles and labels
+        for ax in g.axes.flat:
+            ax.set_title(ax.get_title().split("=")[-1])
+            ax.set_xlabel(target)
+            ax.set_ylabel("Value")
+
+        plt.tight_layout()
+
+        if save_plot:
+            plot_name = f"{self.dataset_name}_facet_violin_plot.png"
+
+            image_path = Path(
+                get_directory(
+                    self.config.ARTIFACTS_DIR,
+                    self.config.IMAGE_DIR,
+                    self.dataset_name,
+                    self.config.EDA_DIR,
+                ),
+                plot_name,
+            )
+            plt.savefig(image_path, dpi=200)
+
+            if self.verbose:
+                # Relative path
+                print(
+                    f"Saving Facet Violin Plot to: {image_path.relative_to(Path.cwd())}"
+                )
+
+        if show_plot:
+            plt.show()
+
+    def plot_heatmap(
+        self,
+        heatmap_type: str = "correlation",
+        save_plot: bool = True,
+        show_plot: bool = False,
+    ):
+        """
+        Creates a heatmap of either correlation or covariance matrix.
+
+        Parameters:
+        heatmap_type (str): Type of heatmap to create. Should be 'correlation' or 'covariance'.
+        save_plot (bool): Whether to save the plot as an image.
+        show_plot (bool): Whether to display the plot.
+        """
+        if self.data is None or self.data.empty:
+            raise ValueError(
+                "Data not loaded. Please load the data first using the load_data method."
+            )
+
+        if heatmap_type not in ["correlation", "covariance"]:
+            raise ValueError(
+                "Invalid heatmap type. Please choose either 'correlation' or 'covariance'."
+            )
+
+        if heatmap_type == "correlation":
+            matrix = self.data.corr()
+            title = "Correlation Heatmap"
+        else:
+            matrix = self.data.cov()
+            title = "Covariance Heatmap"
+
+        mask = np.zeros_like(matrix, dtype=bool)
+        mask[np.triu_indices_from(mask)] = True
+
+        plt.figure(figsize=(12, 8))
+        sns.heatmap(
+            matrix,
+            mask=mask,
+            annot=True,
+            fmt=".2f",
+            cmap="coolwarm",
+            square=True,
+            linewidth=0.5,
+        )
+        plt.title(title)
+        plt.grid(False)
+        plt.tight_layout()
+
+        if save_plot:
+            plot_name = f"{self.dataset_name}_{heatmap_type}_heatmap.png"
+            image_path = Path(
+                get_directory(
+                    self.config.ARTIFACTS_DIR,
+                    self.config.IMAGE_DIR,
+                    self.dataset_name,
+                    self.config.EDA_DIR,
+                ),
+                plot_name,
+            )
+            plt.savefig(image_path, dpi=200)
+
+            if self.verbose:
+                # Relative path
+                print(f"Saving {title} to: {image_path.relative_to(Path.cwd())}")
+
+        if show_plot:
+            plt.show()
+
+    def generate_data_profile_report(self) -> None:
+        profile = ProfileReport(
+            self.data, title=f"{self.dataset_name}: Profiling Report"
+        )
+        report_path = get_directory(
+            self.config.ARTIFACTS_DIR,
+            self.config.IMAGE_DIR,
+            self.dataset_name,
+            self.config.EDA_DIR,
+        )
+        profile.to_file(report_path / f"{self.dataset_name}_profile_report.html")
+
+    def run(self, target_col: str, column_types: Dict[str, str]) -> Tuple[
+        Self,
+        pd.DataFrame,
+        pd.DataFrame,
+        pd.DataFrame,
+        pd.DataFrame,
+        pd.DataFrame,
+        pd.DataFrame,
+    ]:
         if self.verbose:
             logger.info(f"Reading, Loading and Processing Dataset: {self.dataset_name}")
 
         self.load_data(verbose=self.verbose, delimiter=self.delimiter)
+        self.cast_datatypes(column_type_map=column_types)
         self.summary_statistics(target_col=target_col)
         self.check_missing_values()
         self.outliers = self.check_outliers()
 
+        # Run YData Profile Report
+        generate_report = self.config.DATA_PROCESSING_PARAMS.get(
+            "profile_report", False
+        )
+        if generate_report:
+            self.generate_data_profile_report()
+
+        # Data Vizualization Processing
+        feature_list = self.data.loc[:, self.data.columns != target_col].columns
+
+        self.create_violin_plots(
+            self.data,
+            feature_list,
+            target_col,
+            save_plot=True,
+        )
+        self.plot_heatmap(heatmap_type="correlation")
+        self.plot_heatmap(heatmap_type="covariance")
+
+        # ML Processing
         X_TRAIN, X_TEST, y_train, y_test, X, y = self.create_train_test_split(
             target_col
         )
-        self.x_train, self.x_test = X_TRAIN, X_TEST
-        self.y_train, self.y_test = y_train, y_test
-        self.features, self.target = X, y
-        return self
+        self.features_list = list(X.columns)
+        self.target = y.name
+
+        return self, X_TRAIN, X_TEST, y_train, y_test, X, y
 
 
 if __name__ == "__main__":
+    DATA_PROCESSING_PARAMS = {
+        "profile_report": False,
+    }
 
-    dataset = Dataset("winequality-white.csv", data_delimiter=";", config=config).run(
-        target_col="quality"
+    ML_PREPROCESS_PARAMS = {
+        "shuffle": True,
+        "stratify": True,
+        "test_size": 0.3,
+        "class_weights": None,
+    }
+
+    config = Config(
+        data_procesing_params=DATA_PROCESSING_PARAMS,
+        ml_processing_params=ML_PREPROCESS_PARAMS,
+        verbose=True,
     )
+
+    #############################################################################
+    # Start of Data Processing
+    dataset, X_TRAIN, X_TEST, y_train, y_test, X, y = Dataset(
+        "winequality-white.csv", data_delimiter=";", config=config
+    ).run(target_col="quality", column_types=WINE_DATA_SCHEMA)
 
     logger.info("Finished Processing Dataset")
+    #############################################################################
 
-    parameter_grid = {"max_depth": np.linspace(0, 10, 1)}
-    eval_metric = "accuracy"
-    wine_dt = DTClassifier(config, parameter_grid, eval_metric)
+    # parameter_grid = {"max_depth": np.linspace(0, 10, 1)}
+    # eval_metric = "accuracy"
+    # wine_dt = DTClassifier(config, parameter_grid, eval_metric)
 
-    scoring_func = wine_dt.get_scorer("accuracy")
+    # scoring_func = wine_dt.get_scorer("accuracy")
 
-    best_param_value = wine_dt.plot_validation_curve(
-        dataset.features,
-        dataset.target,
-        dataset_name="winequality-white",
-        param_name="max_depth",
-        param_range=np.arange(1, 11),
-        save_plot=True,
-    )
+    # best_param_value = wine_dt.plot_validation_curve(
+    #     dataset.features,
+    #     dataset.target,
+    #     dataset_name="winequality-white",
+    #     param_name="max_depth",
+    #     param_range=np.arange(1, 11),
+    #     save_plot=True,
+    # )
 
-    wine_dt.set_params(max_depth=best_param_value)
-    wine_dt.plot_learning_curve(
-        dataset.features,
-        dataset.target,
-        param_name="max_depth",
-        dataset_name="winequality-white",
-        save_plot=True,
-    )
+    # wine_dt.set_params(max_depth=best_param_value)
+    # wine_dt.plot_learning_curve(
+    #     dataset.features,
+    #     dataset.target,
+    #     param_name="max_depth",
+    #     dataset_name="winequality-white",
+    #     save_plot=True,
+    # )

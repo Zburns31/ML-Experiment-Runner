@@ -171,7 +171,13 @@ class BaseClassifier(ClassifierMixin, BaseEstimator, ABC):
             plot_name = f"{dataset_name}_{model_name}_learning_curve.png"
 
             image_path = Path(
-                get_directory(self.config.IMAGE_DIR, dataset_name, model_name),
+                get_directory(
+                    self.config.ARTIFACTS_DIR,
+                    self.config.IMAGE_DIR,
+                    dataset_name,
+                    model_name,
+                ),
+                # get_directory(self.config.IMAGE_DIR, dataset_name, model_name),
                 plot_name,
             )
             plt.savefig(image_path)
@@ -264,6 +270,7 @@ class BaseClassifier(ClassifierMixin, BaseEstimator, ABC):
 
             image_path = Path(
                 get_directory(
+                    self.config.ARTIFACTS_DIR,
                     self.config.IMAGE_DIR,
                     dataset_name,
                     model_name,

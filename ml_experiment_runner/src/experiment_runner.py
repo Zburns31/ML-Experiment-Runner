@@ -4,21 +4,24 @@ import os
 from config import Config
 from pathlib import Path
 
-# Used for loggin purposes
-width = os.get_terminal_size().columns
-
-config = Config(verbose=True)
-
+logging_config = Config(
+    data_procesing_params={}, ml_processing_params={}, verbose=False
+)
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - %(name)s - %(levelname)s: %(message)s",
     datefmt="%Y-%m-%d:%H:%M:%S",
     handlers=[
-        logging.FileHandler(Path(config.LOGS_DIR, "ml_experiments.log"), mode="w+"),
+        logging.FileHandler(
+            Path(logging_config.LOGS_DIR, "ml_experiments.log"), mode="w+"
+        ),
         logging.StreamHandler(),
     ],
 )
 logger = logging.getLogger(__name__)
+
+# Used for loggin purposes
+width = os.get_terminal_size().columns
 
 import numpy as np
 import pandas as pd
@@ -29,10 +32,10 @@ from typing import Self, List, Dict, Type, Union
 from datetime import datetime
 from collections import defaultdict
 
-from learners.base_learner import BaseClassifier
+from learners.base_classifier import BaseClassifier
 from learners.DT import DTClassifier
 from config import Config
-from dataset import Dataset
+from dataset import Dataset, WINE_DATA_SCHEMA
 
 
 class MLExperimentRunner:
@@ -109,7 +112,7 @@ class MLExperimentRunner:
         experiment_times[f"{estimator.name}_{param_name}"] = run_time.seconds
         return experiment_times
 
-    def main(self) -> Dict[str, float]:
+    def main(self, features: pd.DataFrame, target: pd.Series) -> Dict[str, float]:
         self.model = self.init_estimator()
 
         logger.info(
@@ -126,9 +129,7 @@ class MLExperimentRunner:
         for param_name, param_range in self.param_grid.items():
 
             experiment_details[self.model.name].append(
-                self.run_experiment(
-                    self.data.features, self.data.target, param_name, param_range
-                )
+                self.run_experiment(features, target, param_name, param_range)
             )
             logger.info("-" * width)
 
@@ -136,11 +137,34 @@ class MLExperimentRunner:
 
 
 if __name__ == "__main__":
-    wine_data = Dataset("winequality-white.csv", data_delimiter=";", config=config).run(
-        target_col="quality"
+    #############################################################################
+    # Setup logging and parameters
+    DATA_PROCESSING_PARAMS = {
+        "profile_report": False,
+    }
+
+    ML_PREPROCESS_PARAMS = {
+        "shuffle": True,
+        "stratify": True,
+        "test_size": 0.3,
+        "class_weights": None,
+    }
+
+    config = Config(
+        data_procesing_params=DATA_PROCESSING_PARAMS,
+        ml_processing_params=ML_PREPROCESS_PARAMS,
+        verbose=True,
     )
 
+    #############################################################################
+    # Start of Data Processing
+    wine_dataset, X_TRAIN, X_TEST, y_train, y_test, X, y = Dataset(
+        "winequality-white.csv", data_delimiter=";", config=config
+    ).run(target_col="quality", column_types=WINE_DATA_SCHEMA)
+
     logger.info("Finished Processing Dataset")
+    print("-" * width)
+    #############################################################################
 
     logger.info("Beginning ML Experiments")
 
@@ -153,9 +177,9 @@ if __name__ == "__main__":
     }
 
     dt_experiment = MLExperimentRunner(
-        DTClassifier, wine_data, config, eval_metric, param_grid
+        DTClassifier, wine_dataset, config, eval_metric, param_grid
     )
     logger.info(f"Experiment Name: {dt_experiment.experiment_name}")
 
-    experiment_times_dict = dt_experiment.main()
+    experiment_times_dict = dt_experiment.main(features=X, target=y)
     logger.info(json.dumps(dict(experiment_times_dict), indent=4))

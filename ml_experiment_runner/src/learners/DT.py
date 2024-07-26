@@ -6,7 +6,7 @@ import time
 
 from config import Config
 from utilities import get_directory
-from learners.base_learner import BaseClassifier
+from learners.base_classifier import BaseClassifier
 from typing import Dict, Tuple, List, Self, Type, Union
 from pathlib import Path
 

@@ -2,13 +2,17 @@ import logging
 from config import Config
 from pathlib import Path
 
-
+logging_config = Config(
+    data_procesing_params={}, ml_processing_params={}, verbose=False
+)
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - %(name)s - %(levelname)s: %(message)s",
     datefmt="%Y-%m-%d:%H:%M:%S",
     handlers=[
-        logging.FileHandler(Path(Config().LOGS_DIR, "ml_experiments.log"), mode="w+"),
+        logging.FileHandler(
+            Path(logging_config.LOGS_DIR, "ml_experiments.log"), mode="w+"
+        ),
         logging.StreamHandler(),
     ],
 )
@@ -19,13 +23,12 @@ import os
 import json
 import numpy as np
 
-from typing import Type, List, Union, Dict
-from dataset import Dataset
+from typing import List, Dict
+from dataset import Dataset, WINE_DATA_SCHEMA
 from experiment_runner import MLExperimentRunner
 from learners.DT import DTClassifier
-from learners.base_learner import BaseClassifier
 from experiment_runner import MLExperimentRunner
-from config import Config
+from config import Config, DATA_PROCESSING_PARAMS, ML_PREPROCESS_PARAMS
 from utilities import print_tuples
 
 # Used for logging purposes
@@ -68,14 +71,15 @@ def run_experiment_configuration(
 
     experiment_times = []
 
-    for dataset in datasets:
+    for dataset_tuple in datasets:
+        dataset, X_TRAIN, X_TEST, y_train, y_test, X, y = dataset_tuple
         experiment = MLExperimentRunner(
             estimator, dataset, config, eval_metric, param_grid
         )
         if config.VERBOSE:
             print(f"Experiment Name: {experiment.experiment_name}")
 
-        experiment_times_dict = experiment.main()
+        experiment_times_dict = experiment.main(features=X, target=y)
         experiment_times.append(dict(experiment_times_dict))
         print("-" * width)
 
@@ -83,6 +87,8 @@ def run_experiment_configuration(
 
 
 if __name__ == "__main__":
+    #############################################################################
+    # CLI Args
     parser = argparse.ArgumentParser(
         prog="ML Experiment Runner", description="Perform some ML experiments"
     )
@@ -118,10 +124,25 @@ if __name__ == "__main__":
         action="store_true",
         help="Dry run. Only reports passed in CLI arguments",
     )
+    parser.add_argument(
+        "-p",
+        "--profile-report",
+        action="store_true",
+        help="Flag to generate a YData Profile report on the dataset. Defaults to False",
+    )
     args = parser.parse_args()
-
     verbose = args.verbose
-    config = Config(verbose=verbose)
+
+    if args.profile_report:
+        DATA_PROCESSING_PARAMS["profile_report"] = True
+    #############################################################################
+    # Setup logging and parameters
+
+    config = Config(
+        data_procesing_params=DATA_PROCESSING_PARAMS,
+        ml_processing_params=ML_PREPROCESS_PARAMS,
+        verbose=verbose,
+    )
 
     if verbose:
         print(f"{parser.prog} CLI Arguments")
@@ -130,10 +151,11 @@ if __name__ == "__main__":
         print("-" * width)
 
     # Collect Datasets
+    # Tuple(dataset, X_TRAIN, X_TEST, y_train, y_test, X, y)
     datasets = [
         Dataset("winequality-white.csv", data_delimiter=";", config=config).run(
-            target_col="quality"
-        ),
+            target_col="quality", column_types=WINE_DATA_SCHEMA
+        )
     ]
 
     print("Finished Processing Dataset")
